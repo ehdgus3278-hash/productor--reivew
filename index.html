@@ -27,6 +27,21 @@
             <h2>리뷰 목록</h2>
             <div id="reviews-container"></div>
         </section>
+        <section id="partner-form-section">
+            <h2>제휴 문의</h2>
+            <form id="partner-form" action="https://formspree.io/f/mpqjyabr" method="POST">
+                <label for="partner-name">이름</label>
+                <input type="text" id="partner-name" name="name" required>
+                <label for="partner-email">이메일</label>
+                <input type="email" id="partner-email" name="email" required>
+                <label for="partner-company">회사명</label>
+                <input type="text" id="partner-company" name="company">
+                <label for="partner-message">문의 내용</label>
+                <textarea id="partner-message" name="message" rows="4" required></textarea>
+                <input type="hidden" name="_subject" value="네이버블로그리뷰 작성기 제휴 문의">
+                <button type="submit">문의 보내기</button>
+            </form>
+        </section>
     </main>
     <footer>
         <p>&copy; 2024 네이버블로그리뷰 작성기</p>

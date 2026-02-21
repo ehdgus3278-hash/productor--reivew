@@ -1,6 +1,6 @@
 class ReviewCard extends HTMLElement {
     constructor() {
-        super();
+        super();d
         const template = document.getElementById('review-card-template').content;
         this.attachShadow({ mode: 'open' }).appendChild(template.cloneNode(true));
     }
