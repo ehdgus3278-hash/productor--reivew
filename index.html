@@ -1,41 +1,41 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ko">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blog Review</title>
+    <title>네이버블로그리뷰 작성기</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <h1>Blog Review</h1>
+        <h1>네이버블로그리뷰 작성기</h1>
     </header>
     <main>
         <section id="review-form-section">
-            <h2>Submit a Review</h2>
+            <h2>리뷰 작성</h2>
             <form id="review-form">
-                <label for="blog-url">Blog Post URL:</label>
+                <label for="blog-url">블로그 글 URL</label>
                 <input type="url" id="blog-url" name="blog-url" required>
-                <label for="rating">Rating:</label>
+                <label for="rating">평점 (1~5)</label>
                 <input type="number" id="rating" name="rating" min="1" max="5" required>
-                <label for="review-text">Review:</label>
+                <label for="review-text">리뷰 내용</label>
                 <textarea id="review-text" name="review-text" rows="4" required></textarea>
-                <button type="submit">Submit Review</button>
+                <button type="submit">리뷰 등록</button>
             </form>
         </section>
         <section id="reviews-section">
-            <h2>Reviews</h2>
+            <h2>리뷰 목록</h2>
             <div id="reviews-container"></div>
         </section>
     </main>
     <footer>
-        <p>&copy; 2024 Blog Review Site</p>
+        <p>&copy; 2024 네이버블로그리뷰 작성기</p>
     </footer>
     <template id="review-card-template">
         <div class="review-card">
             <p><strong>URL:</strong> <a href="" target="_blank"></a></p>
-            <p><strong>Rating:</strong> <span></span></p>
-            <p><strong>Review:</strong></p>
+            <p><strong>평점:</strong> <span></span></p>
+            <p><strong>리뷰:</strong></p>
             <p></p>
         </div>
     </template>
