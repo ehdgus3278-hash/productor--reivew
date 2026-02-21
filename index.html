@@ -9,8 +9,32 @@
 <body>
     <header>
         <h1>네이버블로그리뷰 작성기</h1>
+        <nav>
+            <a href="#review-form-section">리뷰 작성</a>
+            <a href="#reviews-section">리뷰 목록</a>
+            <a href="#partner-form-section">제휴 문의</a>
+            <a href="#site-info-section">사이트 소개</a>
+            <a href="#policies-section">정책</a>
+        </nav>
     </header>
     <main>
+        <section id="site-info-section">
+            <h2>사이트 소개</h2>
+            <p>네이버 블로그 글을 읽고 느낀 점을 기록하고 공유할 수 있는 리뷰 작성 도구입니다. 사용자가 필요한 정보를 빠르게 찾을 수 있도록 간단하고 명확한 구조를 유지합니다.</p>
+            <h3>콘텐츠 운영 원칙</h3>
+            <ul>
+                <li>중복되거나 가치가 낮은 콘텐츠는 만들지 않습니다.</li>
+                <li>사용자가 실제로 도움이 되는 리뷰를 쉽게 찾고 읽을 수 있도록 구성합니다.</li>
+                <li>페이지 목적에 맞는 정보만 제공하고, 사용자를 혼란시키는 구성은 지양합니다.</li>
+            </ul>
+            <h3>리뷰 작성 가이드</h3>
+            <ul>
+                <li>실제 읽은 글의 핵심 내용을 요약하고, 개인적인 인사이트를 덧붙여 주세요.</li>
+                <li>비방, 허위 정보, 과장된 표현은 금지합니다.</li>
+                <li>간결하지만 구체적인 평가 기준을 포함해 주세요.</li>
+            </ul>
+            <p>운영자 연락은 아래 제휴 문의 폼을 이용해 주세요.</p>
+        </section>
         <section id="review-form-section">
             <h2>리뷰 작성</h2>
             <form id="review-form">
@@ -20,6 +44,7 @@
                 <input type="number" id="rating" name="rating" min="1" max="5" required>
                 <label for="review-text">리뷰 내용</label>
                 <textarea id="review-text" name="review-text" rows="4" required></textarea>
+                <p class="hint">리뷰는 실제 경험과 정보를 기반으로 작성해 주세요.</p>
                 <button type="submit">리뷰 등록</button>
             </form>
         </section>
@@ -39,8 +64,16 @@
                 <label for="partner-message">문의 내용</label>
                 <textarea id="partner-message" name="message" rows="4" required></textarea>
                 <input type="hidden" name="_subject" value="네이버블로그리뷰 작성기 제휴 문의">
+                <p class="hint">제휴 목적과 기대 효과를 간단히 적어주세요.</p>
                 <button type="submit">문의 보내기</button>
             </form>
+        </section>
+        <section id="policies-section">
+            <h2>정책</h2>
+            <h3>이용약관</h3>
+            <p>본 사이트는 리뷰 작성 및 열람을 위한 정보 제공 목적으로 운영됩니다. 불법·유해 콘텐츠, 허위·과장 리뷰, 스팸성 내용은 게시할 수 없습니다.</p>
+            <h3>개인정보처리방침</h3>
+            <p>제휴 문의를 위해 이름, 이메일, 회사명, 문의 내용을 수집합니다. 수집된 정보는 문의 대응을 위해서만 사용하며, 처리 목적 달성 후 지체 없이 파기합니다.</p>
         </section>
     </main>
     <footer>
