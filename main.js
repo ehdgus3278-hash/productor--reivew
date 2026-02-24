@@ -124,54 +124,153 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    const buildSearchSummary = (items) => {
-        if (!items.length) {
-            return '검색 결과가 없거나 아직 검색하지 않았습니다.';
-        }
+    const extractReadableText = (html) => {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, 'text/html');
+        const selectors = [
+            '.se-main-container',
+            '#postViewArea',
+            '.post-view .view',
+            '.post_ct',
+            'article'
+        ];
 
-        const selected = items.slice(0, 3).map((item) => {
-            const title = cleanText(item.title);
-            const description = cleanText(item.description);
-            const blogger = cleanText(item.bloggername);
-            const postDate = cleanText(item.postdate);
-            return `- ${title} (${blogger}, ${postDate}) : ${description}`;
+        const chunks = [];
+        selectors.forEach((selector) => {
+            doc.querySelectorAll(selector).forEach((node) => {
+                const text = (node.textContent || '').replace(/\s+/g, ' ').trim();
+                if (text.length > 80) {
+                    chunks.push(text);
+                }
+            });
         });
 
-        return selected.join('\n');
+        if (!chunks.length) {
+            const fallback = (doc.body?.textContent || '').replace(/\s+/g, ' ').trim();
+            return fallback;
+        }
+
+        return chunks.join(' ');
     };
 
-    const buildDraft = (items, reviewText) => {
-        const summaryBlock = buildSearchSummary(items);
-        const cleanReview = reviewText.trim() || '직접 작성한 후기가 아직 없습니다. 경험을 기반으로 자유롭게 보강해 주세요.';
+    const toProxyUrl = (link) => {
+        const normalized = link.startsWith('http') ? link : `https://${link}`;
+        return `https://r.jina.ai/http://${normalized.replace(/^https?:\/\//, '')}`;
+    };
+
+    const fetchBlogBody = async (link) => {
+        const targets = [toProxyUrl(link), link];
+
+        for (const target of targets) {
+            try {
+                const response = await fetch(target);
+                if (!response.ok) {
+                    continue;
+                }
+                const text = await response.text();
+                const readable = extractReadableText(text);
+                if (readable.length > 200) {
+                    return readable;
+                }
+            } catch (error) {
+                // try next target
+            }
+        }
+
+        return '';
+    };
+
+    const summarizeBodies = (bodies) => {
+        const joined = bodies.join(' ');
+        const rawSentences = joined
+            .split(/[.!?\n]+/)
+            .map((line) => line.trim())
+            .filter((line) => line.length >= 18 && line.length <= 140);
+
+        const seen = new Set();
+        const unique = [];
+        rawSentences.forEach((sentence) => {
+            const key = sentence.toLowerCase();
+            if (!seen.has(key)) {
+                seen.add(key);
+                unique.push(sentence);
+            }
+        });
+
+        return unique.slice(0, 5);
+    };
+
+    const buildDraft = (items, reviewText, keyword, summarySentences) => {
+        const topic = keyword || '방문 후기';
+        const myReview = reviewText.trim();
+        const titleBase = cleanText(items[0]?.title || topic);
+        const headline = `${topic} 내돈내산 후기 | ${titleBase}`;
+
+        const introLine = summarySentences.length
+            ? `네이버에서 ${topic} 관련 블로그 본문을 여러 개 읽어보니 ${summarySentences[0]} 포인트가 반복적으로 언급됐습니다.`
+            : `네이버 블로그 본문을 참고해 ${topic} 관련 핵심 포인트를 먼저 정리했습니다.`;
+
+        const bodyLine = summarySentences.length > 1
+            ? `${summarySentences.slice(1, 4).join(', ')} 같은 내용도 공통적으로 확인되어 방문 전에 참고하기 좋았습니다.`
+            : `${topic}는 시간대, 메뉴 선택, 동선에 따라 체감이 달라질 수 있다는 점이 공통적으로 보였습니다.`;
 
         return [
-            '한줄요약',
-            '간단한 결론을 한 줄로 정리해 주세요.',
+            headline,
             '',
-            '방문동기',
-            summaryBlock,
+            `${introLine} ${bodyLine}`,
             '',
-            '분위기',
-            cleanReview,
+            `위 내용을 참고해서 직접 다녀온 제 실제 후기는 이렇습니다.`,
+            myReview,
             '',
-            '메뉴',
-            '검색 내용과 실제 경험을 바탕으로 메뉴 특징을 정리해 주세요.',
+            `결론적으로 검색으로 확인한 정보와 실제 경험을 함께 비교해 보니 ${topic}를 준비할 때 체크해야 할 기준이 더 분명해졌습니다. 저처럼 방문 예정인 분들은 위 포인트를 기준으로 예약 시간과 주문 구성을 잡으면 만족도가 높을 것 같습니다.`,
             '',
-            '팁',
-            '대기시간/추천 시간대/좌석 팁 등 실전 정보를 적어 주세요.',
-            '',
-            '총평',
-            cleanReview,
-            '',
-            '해시태그',
-            '#맛집 #후기 #리뷰'
+            '#네이버블로그 #내돈내산 #방문후기 #리뷰'
         ].join('\n');
     };
 
-    const updateDraft = () => {
+    const updateDraft = async () => {
         const reviewText = userReview.value;
-        const draft = buildDraft(latestSearchItems, reviewText);
-        draftOutput.textContent = draft;
+        if (!latestSearchItems.length) {
+            draftOutput.textContent = '';
+            setDraftStatus('먼저 네이버 검색을 실행해 블로그 정보를 불러와 주세요.', true);
+            return;
+        }
+        if (!reviewText.trim()) {
+            draftOutput.textContent = '';
+            setDraftStatus('내 실제 후기를 입력해야 블로그형 본문으로 생성됩니다.', true);
+            return;
+        }
+
+        generateButton.disabled = true;
+        setDraftStatus('블로그 본문을 읽고 글을 생성하는 중입니다...', false);
+
+        try {
+            const candidates = latestSearchItems
+                .map((item) => item.link)
+                .filter((link) => typeof link === 'string' && link.length > 0)
+                .slice(0, 4);
+
+            const bodies = [];
+            for (const link of candidates) {
+                const body = await fetchBlogBody(link);
+                if (body) {
+                    bodies.push(body);
+                }
+            }
+
+            if (!bodies.length) {
+                draftOutput.textContent = '';
+                setDraftStatus('블로그 본문을 읽어오지 못했습니다. 잠시 후 다시 시도해 주세요.', true);
+                return;
+            }
+
+            const summarySentences = summarizeBodies(bodies);
+            const draft = buildDraft(latestSearchItems, reviewText, searchInput.value.trim(), summarySentences);
+            draftOutput.textContent = draft;
+            setDraftStatus('블로그 본문 기반 후기 글이 생성되었습니다.', false);
+        } finally {
+            generateButton.disabled = false;
+        }
     };
 
     userReview.value = localStorage.getItem(USER_REVIEW_KEY) || '';
@@ -179,9 +278,8 @@ document.addEventListener('DOMContentLoaded', () => {
         localStorage.setItem(USER_REVIEW_KEY, userReview.value);
     });
 
-    generateButton.addEventListener('click', () => {
-        updateDraft();
-        setDraftStatus('후기 초안이 생성되었습니다.', false);
+    generateButton.addEventListener('click', async () => {
+        await updateDraft();
     });
 
     copyButton.addEventListener('click', async () => {
