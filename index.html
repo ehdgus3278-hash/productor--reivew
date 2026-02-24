@@ -30,13 +30,9 @@
         </section>
         <section id="draft-section">
             <h2>후기 초안 만들기</h2>
-            <label for="user-review" class="section-label">내 실제 후기</label>
-            <textarea id="user-review" rows="6" placeholder="직접 작성한 후기를 입력하세요. 자동으로 저장됩니다."></textarea>
-            <div class="draft-settings">
-                <label for="length-input" class="section-label">목표 글자수</label>
-                <input type="number" id="length-input" min="800" max="3000" step="50" value="2000">
-                <p class="hint">글자수는 공백 포함 기준입니다. (기본 2000자)</p>
-            </div>
+            <label for="user-review" class="section-label">내 실제 후기 메모</label>
+            <textarea id="user-review" rows="8" placeholder="직접 방문해서 느낀 점을 메모해 주세요. 자동으로 저장됩니다."></textarea>
+            <p class="hint">메모를 자세히 적을수록 문단형 후기 글의 완성도가 높아집니다.</p>
             <div class="draft-actions">
                 <button type="button" id="generate-button">글 생성</button>
                 <button type="button" id="copy-button" class="secondary">복사</button>

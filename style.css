@@ -119,10 +119,11 @@ main {
     background: #fafafa;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 14px;
-    min-height: 120px;
-    font-size: 0.95rem;
-    line-height: 1.6;
+    padding: 18px;
+    min-height: 260px;
+    font-size: 1rem;
+    line-height: 1.8;
+    word-break: keep-all;
 }
 
 .search-bar {
