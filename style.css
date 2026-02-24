@@ -58,6 +58,73 @@ main {
     text-align: left;
 }
 
+#draft-section {
+    background: #fff;
+    padding: 20px;
+    margin-bottom: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    text-align: left;
+}
+
+.section-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: 600;
+}
+
+#user-review {
+    width: 100%;
+    padding: 12px;
+    border-radius: 6px;
+    border: 1px solid #ddd;
+    margin-bottom: 12px;
+    resize: vertical;
+    font-size: 1rem;
+}
+
+.draft-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 10px;
+}
+
+.draft-actions button {
+    background-color: var(--accent-color);
+    color: white;
+    padding: 10px 16px;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    font-size: 1rem;
+}
+
+.draft-actions .secondary {
+    background-color: #e5e5e5;
+    color: #222;
+}
+
+.draft-actions button:hover {
+    background-color: #5a5a5a;
+}
+
+.draft-actions .secondary:hover {
+    background-color: #d5d5d5;
+}
+
+.draft-output {
+    white-space: pre-wrap;
+    background: #fafafa;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    padding: 14px;
+    min-height: 120px;
+    font-size: 0.95rem;
+    line-height: 1.6;
+}
+
 .search-bar {
     display: flex;
     gap: 10px;
@@ -232,6 +299,11 @@ main {
     }
 
     .search-bar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .draft-actions {
         flex-direction: column;
         align-items: stretch;
     }
