@@ -30,7 +30,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const isMostlyHashtags = (value) => {
         const tags = (value.match(/#[\p{L}0-9_]+/gu) || []).length;
         const tokens = value.trim().split(/\s+/).filter(Boolean).length;
-        return tokens > 0 && tags / tokens > 0.5;
+        return tokens > 0 && tags / tokens > 0.3;
     };
 
     const isMostlyRepeatedKeywords = (value) => {
@@ -72,6 +72,12 @@ document.addEventListener('DOMContentLoaded', () => {
      */
     const cleanSnippet = (text) => {
         let value = cleanText(text || '');
+        if (!value) {
+            return '';
+        }
+        if (isMostlyHashtags(value)) {
+            return '';
+        }
         value = removeHashtags(value);
         value = removeEmojis(value);
         value = value.replace(/[|/]+/g, ' ');
@@ -101,6 +107,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const sentence = pickBestSentence(value);
         const cleaned = normalizeSpaces(sentence || value);
         if (cleaned.length < 10) {
+            return '';
+        }
+        if (/#/.test(cleaned)) {
             return '';
         }
         return cleaned;
@@ -306,12 +315,16 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const sanitizeOutput = (text) => {
-        let output = text.replace(/#[\p{L}0-9_]+/gu, '');
-        output = output.replace(/[|/]+/g, ' ');
-        output = output.replace(/\.{2,}|…+/g, '.');
-        output = output.replace(/([!?.,])\1{1,}/g, '$1');
-        output = normalizeSpaces(output.replace(/\n{3,}/g, '\n\n'));
+        const lines = text.split('\n');
+        const sanitizedLines = lines.map((line) => {
+            let value = line.replace(/#[\p{L}0-9_]+/gu, '');
+            value = value.replace(/[|/]+/g, ' ');
+            value = value.replace(/\.{2,}|…+/g, '.');
+            value = value.replace(/([!?.,])\1{1,}/g, '$1');
+            return normalizeSpaces(value);
+        });
 
+        const output = sanitizedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
         const sentences = output.split(/(?<=[.!?])\s+/);
         const seen = new Set();
         const deduped = [];
@@ -327,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
             deduped.push(sentence);
         });
 
-        return normalizeSpaces(deduped.join(' '));
+        return deduped.join(' ').replace(/\s+\n/g, '\n').trim();
     };
 
     const buildParagraphDraft = (items, reviewText, keyword) => {
@@ -355,10 +368,7 @@ document.addEventListener('DOMContentLoaded', () => {
             `총평\n크게 과장하지 않고 있는 그대로 즐길 수 있는 곳이었고, 편하게 한 끼 해결하고 싶을 때 다시 들를 것 같습니다.`
         ].join('\n\n');
 
-        const hashtagBase = keywords.slice(0, 4).map((word) => `#${word}`).join(' ');
-        const hashtags = hashtagBase ? `\n\n${hashtagBase}` : '';
-
-        return `${title}\n\n${body}${hashtags}`;
+        return `${title}\n\n${body}`;
     };
 
     const updateDraft = async () => {
