@@ -13,7 +13,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const USER_REVIEW_KEY = 'user_review_text';
     /** @type {Array<any>} */
-    let latestSearchItems = [];
+    let rawSearchResults = [];
+    /** @type {Array<any>} */
+    let cleanedSearchResults = [];
+    /** @type {string} */
+    let finalGeneratedReview = '';
 
     const stripHtml = (value) => value.replace(/<[^>]*>/g, '');
     const decodeHtml = (value) => {
@@ -168,25 +172,38 @@ document.addEventListener('DOMContentLoaded', () => {
             const listItem = document.createElement('li');
             listItem.className = 'result-item';
 
-            const title = cleanText(item.title);
-            const bloggerName = cleanText(item.bloggername);
-            const postDate = cleanText(item.postdate);
+            const title = cleanText(item.cleanedTitle || '') || '블로그 글';
             const summary = item.cleanedSummary || '정리된 참고문장을 만들지 못했습니다.';
 
             listItem.innerHTML = `
                 <a class="result-title" href="${item.link}" target="_blank" rel="noopener noreferrer">${title}</a>
-                <div class="result-meta">
-                    <span>${bloggerName}</span>
-                    <span>${postDate}</span>
-                </div>
                 <p class="result-desc">${summary}</p>
             `;
 
             list.appendChild(listItem);
         });
 
+        const references = document.createElement('details');
+        references.className = 'references';
+        references.innerHTML = `
+            <summary>참고한 검색 정보</summary>
+            <div class="reference-list"></div>
+        `;
+        const referenceList = references.querySelector('.reference-list');
+        items.forEach((item) => {
+            const p = document.createElement('p');
+            p.className = 'result-desc';
+            p.textContent = item.cleanedSummary || '';
+            if (p.textContent) {
+                referenceList.appendChild(p);
+            }
+        });
+
         searchResults.innerHTML = '';
         searchResults.appendChild(list);
+        if (referenceList.childNodes.length) {
+            searchResults.appendChild(references);
+        }
     };
 
     const setStatus = (message, isError = false) => {
@@ -204,7 +221,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!keyword) {
             setStatus('검색어를 입력해 주세요.', true);
             searchResults.innerHTML = '';
-            latestSearchItems = [];
+            rawSearchResults = [];
+            cleanedSearchResults = [];
             return;
         }
 
@@ -220,14 +238,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const data = await response.json();
             const items = Array.isArray(data.items) ? data.items : [];
+            rawSearchResults = items;
             const cleanedItems = prepareSearchItems(items);
-            latestSearchItems = cleanedItems;
+            cleanedSearchResults = cleanedItems;
             setStatus(`${cleanedItems.length}건의 참고 결과를 정리했습니다.`, false);
             renderResults(cleanedItems);
         } catch (error) {
             setStatus('검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', true);
             searchResults.innerHTML = '';
-            latestSearchItems = [];
+            rawSearchResults = [];
+            cleanedSearchResults = [];
         } finally {
             searchButton.disabled = false;
         }
@@ -252,10 +272,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return items
             .slice(0, 5)
             .map((item) => {
-                const title = cleanText(item.cleanedTitle || item.title || '');
+                const title = cleanText(item.cleanedTitle || '');
                 const summary = cleanText(item.cleanedSummary || '');
-                return `${title}. ${summary}`;
+                if (!title && !summary) {
+                    return '';
+                }
+                return `${title}. ${summary}`.trim();
             })
+            .filter(Boolean)
             .join(' ');
     };
 
@@ -280,33 +304,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return ranked.slice(0, 6);
     };
 
-    const extractTopicHints = (items) => {
-        const categories = {
-            parking: /(주차|주차장|발렛|주차공간|parking)/i,
-            waiting: /(웨이팅|대기|줄|예약|캐치테이블|오픈런)/i,
-            mood: /(분위기|인테리어|좌석|테이블|조용|넓|아늑|뷰)/i,
-            menu: /(메뉴|시그니처|대표|맛|식감|소스|디저트|음료|양|간)/i,
-            price: /(가격|가성비|만원|원대|비용|세트)/i
-        };
-
-        const hints = {
-            parking: [],
-            waiting: [],
-            mood: [],
-            menu: [],
-            price: []
-        };
-
-        items.slice(0, 5).forEach((item) => {
-            const sentence = `${cleanText(item.cleanedSummary || '')}`.trim();
-            Object.keys(categories).forEach((key) => {
-                if (sentence && categories[key].test(sentence)) {
-                    hints[key].push(sentence);
-                }
-            });
-        });
-
-        return hints;
+    const buildGenerationPrompt = (items, memo, keyword) => {
+        const references = items.map((item) => item.cleanedSummary || '').filter(Boolean);
+        return [
+            '너는 한국어 블로그 리뷰를 쓰는 사람이다.',
+            '검색 결과는 노이즈가 많은 참고자료일 뿐이며, 문장을 복사하지 말고 항상 자연스럽게 재작성해라.',
+            '증거가 부족하면 과장하지 말고 담담하고 자연스럽게 적어라.',
+            '해시태그, 구분자, 검색 키워드를 본문에 넣지 말아라.',
+            `검색어: ${keyword || '방문'}`,
+            `내 메모: ${memo || ''}`,
+            '참고 문장:',
+            ...references.map((ref, idx) => `${idx + 1}. ${ref}`)
+        ].join('\n');
     };
 
     const oneLine = (text, fallback) => {
@@ -314,7 +323,54 @@ document.addEventListener('DOMContentLoaded', () => {
         return cleaned || fallback;
     };
 
-    const sanitizeOutput = (text) => {
+    const getReferenceLines = () => {
+        const rawLines = rawSearchResults.flatMap((item) => [
+            cleanText(item.title || ''),
+            cleanText(item.description || ''),
+            cleanText(item.contentText || '')
+        ]);
+        const cleanedLines = cleanedSearchResults.map((item) => item.cleanedSummary || '');
+        return rawLines.concat(cleanedLines).map((line) => normalizeSpaces(line)).filter(Boolean);
+    };
+
+    const isTooSimilar = (line, references) => {
+        const tokens = line
+            .toLowerCase()
+            .replace(/[^a-z0-9가-힣\s]/g, ' ')
+            .split(/\s+/)
+            .filter((token) => token.length > 1);
+        if (tokens.length < 5) {
+            return false;
+        }
+        return references.some((ref) => {
+            const refTokens = ref
+                .toLowerCase()
+                .replace(/[^a-z0-9가-힣\s]/g, ' ')
+                .split(/\s+/)
+                .filter((token) => token.length > 1);
+            if (!refTokens.length) {
+                return false;
+            }
+            const overlap = tokens.filter((token) => refTokens.includes(token)).length;
+            return overlap / tokens.length > 0.6;
+        });
+    };
+
+    /**
+     * @param {string} text
+     * @returns {string}
+     */
+    const sanitizeFinalReview = (text) => {
+        const references = getReferenceLines();
+        const sectionHeaders = new Set([
+            '제목',
+            '한줄요약',
+            '방문동기',
+            '매장분위기/좌석',
+            '메뉴/맛',
+            '팁(주차/웨이팅/가격대)',
+            '총평'
+        ]);
         const lines = text.split('\n');
         const sanitizedLines = lines.map((line) => {
             let value = line.replace(/#[\p{L}0-9_]+/gu, '');
@@ -322,10 +378,30 @@ document.addEventListener('DOMContentLoaded', () => {
             value = value.replace(/\.{2,}|…+/g, '.');
             value = value.replace(/([!?.,])\1{1,}/g, '$1');
             return normalizeSpaces(value);
+        }).filter((line) => {
+            if (!line) {
+                return false;
+            }
+            if (sectionHeaders.has(line)) {
+                return true;
+            }
+            if ((line.match(/#[\p{L}0-9_]+/gu) || []).length >= 3) {
+                return false;
+            }
+            if ((line.match(/[|/]/g) || []).length >= 2) {
+                return false;
+            }
+            if (/\.\.\.|…/.test(line)) {
+                return false;
+            }
+            if (isTooSimilar(line, references)) {
+                return false;
+            }
+            return true;
         });
 
         const output = sanitizedLines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-        const sentences = output.split(/(?<=[.!?])\s+/);
+        const sentences = output.split('\n');
         const seen = new Set();
         const deduped = [];
         sentences.forEach((sentence) => {
@@ -340,26 +416,26 @@ document.addEventListener('DOMContentLoaded', () => {
             deduped.push(sentence);
         });
 
-        return deduped.join(' ').replace(/\s+\n/g, '\n').trim();
+        return deduped.join('\n').replace(/\n{3,}/g, '\n\n').trim();
     };
 
     const buildParagraphDraft = (items, reviewText, keyword) => {
-        const memo = oneLine(reviewText, '직접 먹으면서 느낀 점을 중심으로 적었습니다.');
+        const memo = cleanSnippet(reviewText) || '직접 먹으면서 느낀 점을 중심으로 적었습니다.';
         const topic = oneLine(keyword, '방문');
-        const hints = extractTopicHints(items);
         const keywords = extractKeywords(items, topic);
 
         const introHint = keywords.length ? `${keywords.slice(0, 3).join(', ')} 관련 후기를 살짝 보고 방문했습니다.` : '간단히 후기를 훑어보고 방문했습니다.';
 
-        const moodHint = oneLine(hints.mood[0], '매장은 생각보다 조용했고, 자리 간격이 너무 답답하진 않았어요.');
-        const menuHint = oneLine(hints.menu[0], '음식 간이 세지 않고 편하게 먹기 좋은 편이었습니다.');
-        const waitHint = oneLine(hints.waiting[0], '피크 타임에는 대기 가능성이 있어 살짝 여유 있게 움직이는 게 좋겠어요.');
-        const parkingHint = oneLine(hints.parking[0], '차를 가져갈 경우 주변 주차 가능 여부를 미리 확인하는 편이 안전합니다.');
-        const priceHint = oneLine(hints.price[0], '가격대는 메뉴 선택에 따라 체감이 달라졌습니다.');
+        const moodHint = '매장은 생각보다 조용했고, 자리 간격이 너무 답답하진 않았어요.';
+        const menuHint = '음식 간이 세지 않고 편하게 먹기 좋은 편이었습니다.';
+        const waitHint = '피크 타임에는 대기 가능성이 있어 살짝 여유 있게 움직이는 게 좋겠어요.';
+        const parkingHint = '차를 가져갈 경우 주변 주차 가능 여부를 미리 확인하는 편이 안전합니다.';
+        const priceHint = '가격대는 메뉴 선택에 따라 체감이 달라졌습니다.';
 
         const title = `${topic} 방문 후기`;
 
         const body = [
+            `제목\n${title}`,
             `한줄요약\n가볍게 들러서 편하게 먹고 나온 방문이었습니다.`,
             `방문동기\n${introHint}\n요즘은 식사 시간이 길지 않아도 만족도가 괜찮은 곳을 찾고 있어서 이번에 들렀습니다.`,
             `매장분위기/좌석\n${moodHint}\n혼자 와도 부담 없고, 두세 명이 앉아 식사하기에도 무난한 느낌이었어요.`,
@@ -368,12 +444,12 @@ document.addEventListener('DOMContentLoaded', () => {
             `총평\n크게 과장하지 않고 있는 그대로 즐길 수 있는 곳이었고, 편하게 한 끼 해결하고 싶을 때 다시 들를 것 같습니다.`
         ].join('\n\n');
 
-        return `${title}\n\n${body}`;
+        return body;
     };
 
     const updateDraft = async () => {
         const reviewText = userReview.value;
-        if (!latestSearchItems.length) {
+        if (!cleanedSearchResults.length) {
             draftOutput.textContent = '';
             setDraftStatus('먼저 네이버 검색을 실행해 블로그 정보를 불러와 주세요.', true);
             return;
@@ -388,9 +464,22 @@ document.addEventListener('DOMContentLoaded', () => {
         setDraftStatus('문단형 후기 글을 생성하는 중입니다...', false);
 
         try {
-            const draft = buildParagraphDraft(latestSearchItems, reviewText, searchInput.value.trim());
-            const sanitized = sanitizeOutput(draft);
-            draftOutput.textContent = sanitized;
+            const memo = reviewText;
+            const keyword = searchInput.value.trim();
+            const generationPrompt = buildGenerationPrompt(cleanedSearchResults, memo, keyword);
+            void generationPrompt;
+
+            const draft = buildParagraphDraft(cleanedSearchResults, memo, keyword);
+            let sanitized = sanitizeFinalReview(draft);
+            const prohibited = /#[^\s#]+|[|/]|\.{2,}|…/.test(sanitized);
+            if (prohibited) {
+                sanitized = sanitizeFinalReview(sanitized);
+            }
+            if (!sanitized) {
+                sanitized = '제목\n방문 후기\n\n한줄요약\n오늘은 짧게 다녀온 방문이었고, 편하게 식사하고 나왔습니다.\n\n방문동기\n가볍게 한 끼 하고 싶어서 들렀습니다.\n\n매장분위기/좌석\n전반적으로 조용했고 자리가 너무 답답하진 않았습니다.\n\n메뉴/맛\n간이 과하지 않고 편하게 먹기 좋은 편이었습니다.\n\n팁(주차/웨이팅/가격대)\n피크 타임에는 대기가 생길 수 있어 여유 있게 움직이는 게 좋습니다.\n\n총평\n무난하게 한 끼 해결하기 좋은 방문이었습니다.';
+            }
+            finalGeneratedReview = sanitized;
+            draftOutput.textContent = finalGeneratedReview;
             setDraftStatus('문단형 후기 글이 생성되었습니다.', false);
         } finally {
             generateButton.disabled = false;
