@@ -29,10 +29,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const normalizeSpaces = (value) => value.replace(/\s+/g, ' ').trim();
 
     const removeEmojis = (value) => value.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '');
-    const removeHashtags = (value) => value.replace(/#[\p{L}0-9_]+/gu, '');
+    const removeHashtags = (value) => value.replace(/#[^\s#]+/g, '');
 
     const isMostlyHashtags = (value) => {
-        const tags = (value.match(/#[\p{L}0-9_]+/gu) || []).length;
+        const tags = (value.match(/#[^\s#]+/g) || []).length;
         const tokens = value.trim().split(/\s+/).filter(Boolean).length;
         return tokens > 0 && tags / tokens > 0.3;
     };
@@ -373,7 +373,7 @@ document.addEventListener('DOMContentLoaded', () => {
         ]);
         const lines = text.split('\n');
         const sanitizedLines = lines.map((line) => {
-            let value = line.replace(/#[\p{L}0-9_]+/gu, '');
+            let value = line.replace(/#[^\s#]+/g, '');
             value = value.replace(/[|/]+/g, ' ');
             value = value.replace(/\.{2,}|…+/g, '.');
             value = value.replace(/([!?.,])\1{1,}/g, '$1');
@@ -385,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (sectionHeaders.has(line)) {
                 return true;
             }
-            if ((line.match(/#[\p{L}0-9_]+/gu) || []).length >= 3) {
+            if ((line.match(/#[^\s#]+/g) || []).length >= 3) {
                 return false;
             }
             if ((line.match(/[|/]/g) || []).length >= 2) {
