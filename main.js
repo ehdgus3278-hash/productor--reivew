@@ -233,11 +233,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const response = await fetch(url);
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+            let data = null;
+            try {
+                data = await response.json();
+            } catch (parseError) {
+                data = null;
             }
-            const data = await response.json();
-            const items = Array.isArray(data.items) ? data.items : [];
+
+            if (!response.ok) {
+                const errorCode = data?.error ? `(${data.error}) ` : '';
+                const errorMessage = data?.message ? ` ${data.message}` : '';
+                setStatus(`검색 중 오류가 발생했습니다. ${errorCode}${errorMessage}`.trim(), true);
+                searchResults.innerHTML = '';
+                rawSearchResults = [];
+                cleanedSearchResults = [];
+                return;
+            }
+
+            if (data?.error) {
+                const errorCode = data.error ? `(${data.error}) ` : '';
+                const errorMessage = data.message ? ` ${data.message}` : '';
+                setStatus(`검색 중 오류가 발생했습니다. ${errorCode}${errorMessage}`.trim(), true);
+                searchResults.innerHTML = '';
+                rawSearchResults = [];
+                cleanedSearchResults = [];
+                return;
+            }
+
+            const items = Array.isArray(data?.items) ? data.items : [];
             rawSearchResults = items;
             const cleanedItems = prepareSearchItems(items);
             cleanedSearchResults = cleanedItems;

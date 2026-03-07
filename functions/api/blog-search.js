@@ -130,7 +130,11 @@ const fetchSearchResults = async (keyword, env) => {
     const clientSecret = env.NAVER_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
-        return { error: 'missing_credentials', items: [] };
+        return {
+            error: 'missing_credentials',
+            message: 'Set NAVER_CLIENT_ID and NAVER_CLIENT_SECRET in Cloudflare Pages environment variables.',
+            items: []
+        };
     }
 
     const url = new URL(NAVER_API_URL);
@@ -147,7 +151,11 @@ const fetchSearchResults = async (keyword, env) => {
     });
 
     if (!response.ok) {
-        return { error: `naver_http_${response.status}`, items: [] };
+        return {
+            error: `naver_http_${response.status}`,
+            message: `Naver API request failed with status ${response.status}.`,
+            items: []
+        };
     }
 
     const data = await response.json();
@@ -174,9 +182,9 @@ export async function onRequest(context) {
         return jsonResponse({ error: 'missing_query', items: [] }, 400);
     }
 
-    const { error, items } = await fetchSearchResults(keyword, env);
+    const { error, message, items } = await fetchSearchResults(keyword, env);
     if (error) {
-        return jsonResponse({ error, items: [] }, 502);
+        return jsonResponse({ error, message: message || 'Upstream error.', items: [] }, 502);
     }
 
     const blogContents = await mapWithConcurrency(items, 3, async (item) => {
