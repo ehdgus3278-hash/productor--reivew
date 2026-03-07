@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const copyButton = document.getElementById('copy-button');
     const draftStatus = document.getElementById('draft-status');
     const draftOutput = document.getElementById('draft-output');
+    const searchApiMeta = document.querySelector('meta[name="search-api-base"]');
 
     const USER_REVIEW_KEY = 'user_review_text';
     /** @type {Array<any>} */
@@ -18,6 +19,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let cleanedSearchResults = [];
     /** @type {string} */
     let finalGeneratedReview = '';
+    const SEARCH_API_BASE = searchApiMeta?.content?.trim() || '/api/blog-search';
 
     const stripHtml = (value) => value.replace(/<[^>]*>/g, '');
     const decodeHtml = (value) => {
@@ -216,6 +218,16 @@ document.addEventListener('DOMContentLoaded', () => {
         draftStatus.classList.toggle('error', isError);
     };
 
+    const buildSearchApiUrl = (keyword) => {
+        const url = /^https?:\/\//i.test(SEARCH_API_BASE)
+            ? new URL(SEARCH_API_BASE)
+            : new URL(SEARCH_API_BASE, window.location.origin);
+        url.searchParams.set('q', keyword);
+        return /^https?:\/\//i.test(SEARCH_API_BASE)
+            ? url.toString()
+            : `${url.pathname}${url.search}`;
+    };
+
     const runSearch = async () => {
         const keyword = searchInput.value.trim();
         if (!keyword) {
@@ -226,7 +238,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const url = `/api/blog-search?q=${encodeURIComponent(keyword)}`;
+        const url = buildSearchApiUrl(keyword);
 
         setStatus('블로그를 검색하고 본문을 정리 중입니다...', false);
         searchButton.disabled = true;
