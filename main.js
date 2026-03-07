@@ -1,3 +1,5 @@
+// @ts-check
+
 document.addEventListener('DOMContentLoaded', () => {
     const searchInput = document.getElementById('search-input');
     const searchButton = document.getElementById('search-button');
@@ -10,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const draftOutput = document.getElementById('draft-output');
 
     const USER_REVIEW_KEY = 'user_review_text';
+    /** @type {Array<any>} */
     let latestSearchItems = [];
 
     const stripHtml = (value) => value.replace(/<[^>]*>/g, '');
@@ -19,6 +22,129 @@ document.addEventListener('DOMContentLoaded', () => {
         return textarea.value;
     };
     const cleanText = (value) => decodeHtml(stripHtml(value || ''));
+    const normalizeSpaces = (value) => value.replace(/\s+/g, ' ').trim();
+
+    const removeEmojis = (value) => value.replace(/[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/gu, '');
+    const removeHashtags = (value) => value.replace(/#[\p{L}0-9_]+/gu, '');
+
+    const isMostlyHashtags = (value) => {
+        const tags = (value.match(/#[\p{L}0-9_]+/gu) || []).length;
+        const tokens = value.trim().split(/\s+/).filter(Boolean).length;
+        return tokens > 0 && tags / tokens > 0.5;
+    };
+
+    const isMostlyRepeatedKeywords = (value) => {
+        const tokens = value
+            .toLowerCase()
+            .replace(/[^a-z0-9가-힣\s]/g, ' ')
+            .split(/\s+/)
+            .filter((token) => token.length > 1);
+        if (tokens.length < 6) {
+            return false;
+        }
+        const counts = new Map();
+        tokens.forEach((token) => counts.set(token, (counts.get(token) || 0) + 1));
+        const repeats = Array.from(counts.values()).filter((count) => count >= 3).length;
+        return repeats >= 2;
+    };
+
+    const pickBestSentence = (text) => {
+        const candidates = text
+            .split(/[.!?\n]/)
+            .map((sentence) => normalizeSpaces(sentence))
+            .filter(Boolean);
+        if (!candidates.length) {
+            return '';
+        }
+        const scored = candidates.map((sentence) => {
+            const length = sentence.length;
+            const penalty = /[|/]/.test(sentence) ? 10 : 0;
+            const score = Math.min(length, 120) - Math.abs(40 - length) - penalty;
+            return { sentence, score };
+        });
+        scored.sort((a, b) => b.score - a.score);
+        return scored[0].sentence;
+    };
+
+    /**
+     * @param {string} text
+     * @returns {string}
+     */
+    const cleanSnippet = (text) => {
+        let value = cleanText(text || '');
+        value = removeHashtags(value);
+        value = removeEmojis(value);
+        value = value.replace(/[|/]+/g, ' ');
+        value = value.replace(/\.{2,}|…+/g, ' ');
+        value = value.replace(/([!?.,])\1{1,}/g, '$1');
+        value = value.replace(/(맛집|추천|리뷰|후기|블로그){2,}/g, '');
+        value = normalizeSpaces(value);
+
+        if (!value) {
+            return '';
+        }
+
+        const lower = value.toLowerCase();
+        if (lower.includes('재방') || /재재재/.test(lower)) {
+            return '재방문 후기가 많은 식당으로 보입니다.';
+        }
+        if ((lower.includes('돌솥') || lower.includes('정식')) && (lower.includes('반찬') || lower.includes('구성') || lower.includes('메뉴'))) {
+            return '돌솥 정식과 다양한 반찬 구성이 특징인 한정식 식당입니다.';
+        }
+        if (lower.includes('카페') && (lower.includes('디저트') || lower.includes('음료'))) {
+            return '디저트와 음료 구성이 괜찮다고 알려진 카페입니다.';
+        }
+        if (lower.includes('국밥') || lower.includes('해장')) {
+            return '속을 편하게 채우기 좋은 메뉴가 있다는 후기입니다.';
+        }
+
+        const sentence = pickBestSentence(value);
+        const cleaned = normalizeSpaces(sentence || value);
+        if (cleaned.length < 10) {
+            return '';
+        }
+        return cleaned;
+    };
+
+    const prepareSearchItems = (items) => {
+        const cleaned = items.map((item) => {
+            const rawTitle = cleanText(item.title || '');
+            const rawDesc = cleanText(item.description || '');
+            const rawContent = cleanText(item.contentText || '');
+            const cleanedTitle = cleanSnippet(rawTitle);
+            const cleanedDesc = cleanSnippet(rawDesc);
+            const cleanedContent = cleanSnippet(rawContent);
+            const summary = cleanedDesc || cleanedContent || cleanedTitle;
+
+            return {
+                ...item,
+                cleanedTitle,
+                cleanedDesc,
+                cleanedContent,
+                cleanedSummary: summary
+            };
+        });
+
+        const filtered = cleaned.filter((item) => {
+            const summary = item.cleanedSummary || '';
+            if (!summary) {
+                return false;
+            }
+            if (summary.length < 12) {
+                return false;
+            }
+            const rawCombined = `${item.title || ''} ${item.description || ''}`;
+            if (isMostlyHashtags(rawCombined)) {
+                return false;
+            }
+            if (isMostlyRepeatedKeywords(summary)) {
+                return false;
+            }
+            return true;
+        });
+
+        return filtered.slice(0, 5);
+    };
 
     const renderResults = (items) => {
         if (!items.length) {
@@ -34,11 +160,9 @@ document.addEventListener('DOMContentLoaded', () => {
             listItem.className = 'result-item';
 
             const title = cleanText(item.title);
-            const description = cleanText(item.description);
             const bloggerName = cleanText(item.bloggername);
             const postDate = cleanText(item.postdate);
-            const contentText = cleanText(item.contentText);
-            const contentHint = contentText ? `${contentText.slice(0, 140)}${contentText.length > 140 ? '…' : ''}` : '본문을 가져오지 못했습니다.';
+            const summary = item.cleanedSummary || '정리된 참고문장을 만들지 못했습니다.';
 
             listItem.innerHTML = `
                 <a class="result-title" href="${item.link}" target="_blank" rel="noopener noreferrer">${title}</a>
@@ -46,8 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>${bloggerName}</span>
                     <span>${postDate}</span>
                 </div>
-                <p class="result-desc">${description}</p>
-                <p class="result-desc">${contentHint}</p>
+                <p class="result-desc">${summary}</p>
             `;
 
             list.appendChild(listItem);
@@ -78,7 +201,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const url = `/api/blog-search?q=${encodeURIComponent(keyword)}`;
 
-        setStatus('블로그를 검색하고 본문을 분석 중입니다...', false);
+        setStatus('블로그를 검색하고 본문을 정리 중입니다...', false);
         searchButton.disabled = true;
 
         try {
@@ -88,9 +211,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const data = await response.json();
             const items = Array.isArray(data.items) ? data.items : [];
-            latestSearchItems = items;
-            setStatus(`${items.length}건의 결과를 찾았습니다.`, false);
-            renderResults(items);
+            const cleanedItems = prepareSearchItems(items);
+            latestSearchItems = cleanedItems;
+            setStatus(`${cleanedItems.length}건의 참고 결과를 정리했습니다.`, false);
+            renderResults(cleanedItems);
         } catch (error) {
             setStatus('검색 중 오류가 발생했습니다. 잠시 후 다시 시도해 주세요.', true);
             searchResults.innerHTML = '';
@@ -117,13 +241,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const buildSearchCorpus = (items) => {
         return items
-            .slice(0, 10)
+            .slice(0, 5)
             .map((item) => {
-                const title = cleanText(item.title);
-                const desc = cleanText(item.description);
-                const date = cleanText(item.postdate);
-                const content = cleanText(item.contentText);
-                return `${title}. ${desc}. ${date}. ${content}`;
+                const title = cleanText(item.cleanedTitle || item.title || '');
+                const summary = cleanText(item.cleanedSummary || '');
+                return `${title}. ${summary}`;
             })
             .join(' ');
     };
@@ -146,7 +268,7 @@ document.addEventListener('DOMContentLoaded', () => {
             .map(([token]) => token)
             .filter((token) => token !== (keyword || '').toLowerCase());
 
-        return ranked.slice(0, 8);
+        return ranked.slice(0, 6);
     };
 
     const extractTopicHints = (items) => {
@@ -154,7 +276,7 @@ document.addEventListener('DOMContentLoaded', () => {
             parking: /(주차|주차장|발렛|주차공간|parking)/i,
             waiting: /(웨이팅|대기|줄|예약|캐치테이블|오픈런)/i,
             mood: /(분위기|인테리어|좌석|테이블|조용|넓|아늑|뷰)/i,
-            menu: /(메뉴|시그니처|대표|맛|식감|소스|디저트|음료|양)/i,
+            menu: /(메뉴|시그니처|대표|맛|식감|소스|디저트|음료|양|간)/i,
             price: /(가격|가성비|만원|원대|비용|세트)/i
         };
 
@@ -166,10 +288,10 @@ document.addEventListener('DOMContentLoaded', () => {
             price: []
         };
 
-        items.slice(0, 10).forEach((item) => {
-            const sentence = `${cleanText(item.title)} ${cleanText(item.description)}`.trim();
+        items.slice(0, 5).forEach((item) => {
+            const sentence = `${cleanText(item.cleanedSummary || '')}`.trim();
             Object.keys(categories).forEach((key) => {
-                if (categories[key].test(sentence)) {
+                if (sentence && categories[key].test(sentence)) {
                     hints[key].push(sentence);
                 }
             });
@@ -179,64 +301,64 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const oneLine = (text, fallback) => {
-        const cleaned = (text || '')
-            .replace(/\s+/g, ' ')
-            .trim();
+        const cleaned = normalizeSpaces(text || '');
         return cleaned || fallback;
     };
 
-    const fitLength = (body, min = 1200, max = 2000) => {
-        let result = body.trim();
-        const extender = '개인적으로는 한 번의 방문으로 단정하기보다, 시간대와 동행 구성에 따라 체감이 달라질 수 있다는 점을 함께 고려하면 판단이 더 정확해졌습니다.';
-        while (result.length < min) {
-            result += `\n${extender}`;
-            if (result.length > max) {
-                break;
+    const sanitizeOutput = (text) => {
+        let output = text.replace(/#[\p{L}0-9_]+/gu, '');
+        output = output.replace(/[|/]+/g, ' ');
+        output = output.replace(/\.{2,}|…+/g, '.');
+        output = output.replace(/([!?.,])\1{1,}/g, '$1');
+        output = normalizeSpaces(output.replace(/\n{3,}/g, '\n\n'));
+
+        const sentences = output.split(/(?<=[.!?])\s+/);
+        const seen = new Set();
+        const deduped = [];
+        sentences.forEach((sentence) => {
+            const key = sentence.replace(/\s+/g, ' ').trim();
+            if (!key) {
+                return;
             }
-        }
-        if (result.length > max) {
-            result = result.slice(0, max).trim();
-            if (!/[.!?]$/.test(result)) {
-                result += '.';
+            if (seen.has(key)) {
+                return;
             }
-        }
-        return result;
+            seen.add(key);
+            deduped.push(sentence);
+        });
+
+        return normalizeSpaces(deduped.join(' '));
     };
 
     const buildParagraphDraft = (items, reviewText, keyword) => {
-        const memo = oneLine(reviewText, '');
+        const memo = oneLine(reviewText, '직접 먹으면서 느낀 점을 중심으로 적었습니다.');
         const topic = oneLine(keyword, '방문');
         const hints = extractTopicHints(items);
         const keywords = extractKeywords(items, topic);
 
-        const keywordText = keywords.length
-            ? `${keywords.slice(0, 4).join(', ')} 같은 키워드를 중심으로 동선을 잡았습니다.`
-            : '동선과 주문 순서를 먼저 정리해두고 움직였습니다.';
+        const introHint = keywords.length ? `${keywords.slice(0, 3).join(', ')} 관련 후기를 살짝 보고 방문했습니다.` : '간단히 후기를 훑어보고 방문했습니다.';
 
-        const moodHint = oneLine(hints.mood[0], '매장 내부는 좌석 간격이 답답하지 않고 회전이 비교적 빠른 편이라 식사 흐름이 끊기지 않았습니다.');
-        const menuHint = oneLine(hints.menu[0], '대표 메뉴를 먼저 주문하고 취향에 맞춰 사이드를 추가하니 전체 밸런스가 안정적으로 맞았습니다.');
-        const waitHint = oneLine(hints.waiting[0], '피크 시간대에는 대기 변수가 생길 수 있어 방문 시간을 조금 앞당기는 편이 편했습니다.');
-        const parkingHint = oneLine(hints.parking[0], '차를 이용한다면 근처 주차 가능 구역을 먼저 확인해두는 편이 이동 스트레스를 줄이는 데 도움이 됩니다.');
-        const priceHint = oneLine(hints.price[0], '가격대는 구성에 따라 차이가 있어 1인 기준 예산을 먼저 정해두면 주문이 훨씬 수월했습니다.');
+        const moodHint = oneLine(hints.mood[0], '매장은 생각보다 조용했고, 자리 간격이 너무 답답하진 않았어요.');
+        const menuHint = oneLine(hints.menu[0], '음식 간이 세지 않고 편하게 먹기 좋은 편이었습니다.');
+        const waitHint = oneLine(hints.waiting[0], '피크 타임에는 대기 가능성이 있어 살짝 여유 있게 움직이는 게 좋겠어요.');
+        const parkingHint = oneLine(hints.parking[0], '차를 가져갈 경우 주변 주차 가능 여부를 미리 확인하는 편이 안전합니다.');
+        const priceHint = oneLine(hints.price[0], '가격대는 메뉴 선택에 따라 체감이 달라졌습니다.');
 
-        const title = `${topic} 솔직 방문후기`;
+        const title = `${topic} 방문 후기`;
 
         const body = [
-            `한줄요약\n한 번에 강하게 인상적인 포인트가 있는 곳이라기보다, 기본기가 안정적이라 재방문을 고민하게 되는 타입이었습니다.\n메뉴 선택과 방문 타이밍만 맞추면 만족도가 올라가는 구조였고, 실제로 저는 예상했던 흐름대로 크게 벗어나지 않았습니다.\n처음 가는 분이라면 욕심내서 많이 시키기보다 핵심 메뉴부터 차근히 경험하는 방식이 가장 효율적이었습니다.`,
-            `방문동기\n최근 일정이 빡빡해서 오래 머무르기보다 식사 동선이 깔끔한 장소가 필요했고, 그래서 이번 방문을 결정했습니다.\n${keywordText}\n실제로 가보니 과하게 포장된 느낌보다는, 기대했던 포인트를 무난하게 충족하는 쪽에 가까웠습니다.`,
-            `매장분위기/좌석\n공간은 전체적으로 정돈되어 있었고 좌석 배치가 복잡하지 않아 처음 들어가도 동선 파악이 어렵지 않았습니다.\n${moodHint}\n대화가 필요한 모임도 가능하고, 빠르게 식사하고 이동해야 하는 일정에도 무리가 없는 환경이었습니다.`,
-            `메뉴/맛\n주문은 너무 과하게 늘리지 않고 대표 메뉴 위주로 시작했는데, 결과적으로 이 선택이 가장 만족스러웠습니다.\n${menuHint}\n${memo}\n전체적으로 간이 과하거나 자극적이지 않아 끝까지 부담 없이 먹기 좋았고, 재주문 의사가 생길 정도의 안정감은 분명했습니다.`,
-            `팁(주차/웨이팅/가격대)\n${waitHint}\n${parkingHint}\n${priceHint}\n저는 인원수에 맞춰 처음부터 주문 상한선을 정해두니 불필요한 추가 주문이 줄어 체감 만족도가 더 좋아졌습니다.`,
-            `총평\n이번 방문은 화려한 한 방보다는 기본 완성도가 꾸준히 받쳐주는 경험에 가까웠고, 그래서 오히려 기억에 남았습니다.\n상황에 맞는 시간대와 주문 구성을 미리 정리해두면 체감 품질이 더 또렷하게 올라가고, 동행 만족도도 함께 높아집니다.\n저는 다음에도 비슷한 일정이라면 같은 방식으로 다시 방문할 생각입니다.`
+            `한줄요약\n가볍게 들러서 편하게 먹고 나온 방문이었습니다.`,
+            `방문동기\n${introHint}\n요즘은 식사 시간이 길지 않아도 만족도가 괜찮은 곳을 찾고 있어서 이번에 들렀습니다.`,
+            `매장분위기/좌석\n${moodHint}\n혼자 와도 부담 없고, 두세 명이 앉아 식사하기에도 무난한 느낌이었어요.`,
+            `메뉴/맛\n${menuHint}\n${memo}\n양이나 간은 과하지 않아서 천천히 먹어도 부담이 적었습니다.`,
+            `팁(주차/웨이팅/가격대)\n${waitHint}\n${parkingHint}\n${priceHint}\n저는 방문 전에 간단히 동선을 확인하니 훨씬 편했어요.`,
+            `총평\n크게 과장하지 않고 있는 그대로 즐길 수 있는 곳이었고, 편하게 한 끼 해결하고 싶을 때 다시 들를 것 같습니다.`
         ].join('\n\n');
 
-        const hashtags = [
-            '#방문후기', '#내돈내산', '#솔직리뷰', '#맛집기록', '#일상리뷰',
-            '#메뉴추천', '#분위기좋은곳', '#웨이팅팁', '#주차팁', '#가격정보',
-            '#재방문의사', '#식사기록', '#동선팁', '#리얼후기', '#블로그후기'
-        ].join(' ');
+        const hashtagBase = keywords.slice(0, 4).map((word) => `#${word}`).join(' ');
+        const hashtags = hashtagBase ? `\n\n${hashtagBase}` : '';
 
-        return `${title}\n\n${fitLength(body, 1200, 2000)}\n\n${hashtags}`;
+        return `${title}\n\n${body}${hashtags}`;
     };
 
     const updateDraft = async () => {
@@ -257,7 +379,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         try {
             const draft = buildParagraphDraft(latestSearchItems, reviewText, searchInput.value.trim());
-            draftOutput.textContent = draft;
+            const sanitized = sanitizeOutput(draft);
+            draftOutput.textContent = sanitized;
             setDraftStatus('문단형 후기 글이 생성되었습니다.', false);
         } finally {
             generateButton.disabled = false;
