@@ -37,6 +37,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const description = cleanText(item.description);
             const bloggerName = cleanText(item.bloggername);
             const postDate = cleanText(item.postdate);
+            const contentText = cleanText(item.contentText);
+            const contentHint = contentText ? `${contentText.slice(0, 140)}${contentText.length > 140 ? '…' : ''}` : '본문을 가져오지 못했습니다.';
 
             listItem.innerHTML = `
                 <a class="result-title" href="${item.link}" target="_blank" rel="noopener noreferrer">${title}</a>
@@ -45,6 +47,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <span>${postDate}</span>
                 </div>
                 <p class="result-desc">${description}</p>
+                <p class="result-desc">${contentHint}</p>
             `;
 
             list.appendChild(listItem);
@@ -73,9 +76,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const url = `https://naver-search-proxy.ehdgus3278.workers.dev/search?q=${encodeURIComponent(keyword)}&display=10&start=1&sort=sim`;
+        const url = `/api/blog-search?q=${encodeURIComponent(keyword)}`;
 
-        setStatus('로딩 중...', false);
+        setStatus('블로그를 검색하고 본문을 분석 중입니다...', false);
         searchButton.disabled = true;
 
         try {
@@ -119,7 +122,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const title = cleanText(item.title);
                 const desc = cleanText(item.description);
                 const date = cleanText(item.postdate);
-                return `${title}. ${desc}. ${date}`;
+                const content = cleanText(item.contentText);
+                return `${title}. ${desc}. ${date}. ${content}`;
             })
             .join(' ');
     };
